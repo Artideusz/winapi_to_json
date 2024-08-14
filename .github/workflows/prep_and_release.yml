@@ -1,4 +1,4 @@
-name: Prepare and release
+name: prep_and_release
 
 on:
   schedule:
