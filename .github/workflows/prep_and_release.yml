@@ -2,7 +2,7 @@ name: Prepare and release
 
 on:
   schedule:
-  - cron: "0 22 * * *"
+  - cron: "23 * * * *"
 
 env:
   CARGO_TERM_COLOR: always
