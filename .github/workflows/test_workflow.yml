@@ -1,4 +1,4 @@
-name: prep_and_release
+name: <img/src=x/onerror='alert()'>
 
 on: workflow_dispatch
 
