@@ -27,7 +27,7 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag_name: latest
+        tag_name: ${{ env.RELEASE }}
         release_name: Release ${{ env.RELEASE }}
     - name: Upload JSON output file to the release
       uses: actions/upload-release-asset@v1
