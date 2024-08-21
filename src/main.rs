@@ -43,7 +43,6 @@ fn parse_type(type_name: &windows_metadata::Type) -> String {
 #[derive(Serialize)]
 struct Module {
     module_name:    String,
-    is_wdk:         bool,
     functions:      Vec<Function>,
 }
 
@@ -55,7 +54,7 @@ struct Function {
 }
 
 
-fn populate_result(result: &mut Vec<Module>, data: &Reader, is_wdk: bool) {
+fn populate_result(result: &mut Vec<Module>, data: &Reader) {
     for data in data.items() {
         match data {
             Item::Const(_) => {
@@ -77,7 +76,6 @@ fn populate_result(result: &mut Vec<Module>, data: &Reader, is_wdk: bool) {
                 if result_index.is_none() {
                     result.push(Module {
                         module_name,
-                        is_wdk,
                         functions: Vec::new(),
                     });
                     result_index = Some(result.len() - 1);
@@ -118,10 +116,14 @@ fn populate_result(result: &mut Vec<Module>, data: &Reader, is_wdk: bool) {
 
 fn main() {
     let mut result: Vec<Module> = vec![];
-    for (i, metadata_url) in vec!["https://github.com/microsoft/windows-rs/raw/master/crates/libs/bindgen/default/Windows.Win32.winmd","https://github.com/microsoft/windows-rs/raw/master/crates/libs/bindgen/default/Windows.Wdk.winmd"].iter().enumerate() {
+    for (i, metadata_url) in vec![
+        "https://github.com/microsoft/windows-rs/raw/master/crates/libs/bindgen/default/Windows.Win32.winmd",
+        "https://github.com/microsoft/windows-rs/raw/master/crates/libs/bindgen/default/Windows.Wdk.winmd",
+        "https://github.com/microsoft/windows-rs/raw/master/crates/libs/bindgen/default/Windows.winmd"
+    ].iter().enumerate() {
         let metadata = MetadataFile::new(download_metadata(metadata_url)).unwrap();
         let reader = windows_metadata::Reader::new(vec![metadata]);
-        populate_result(&mut result, &reader, i != 0);
+        populate_result(&mut result, &reader);
     }
 
     let res = serde_json::to_string_pretty(&result).unwrap();
