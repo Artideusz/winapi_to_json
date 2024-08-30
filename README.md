@@ -33,5 +33,5 @@ The project leverages the `windows_metadata` rust library provided by Microsoft,
 
 You can obtain the output file in two ways:
 
-- By downloading it from the "Releases" tab.
+- By downloading it from the "Releases" tab. You can do it programmatically by running the following command: `wget -O output.json https://github.com/Artideusz/winapi_to_json/releases/latest/download/output.json`.
 - By cloning and running the project locally.
