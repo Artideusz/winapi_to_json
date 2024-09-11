@@ -1,25 +1,39 @@
-use windows_metadata::{self, File as MetadataFile, Item, Reader};
+use windows_metadata::{self, File as MetadataFile, Item, Reader, Type, TypeKind};
 use reqwest;
-use std::io::Write;
+use std::any::Any;
+use std::io::{Read, Write};
 use std::fs::File;
+use std::ops::Deref;
+use std::path::Path;
 use serde::Serialize;
 // https://github.com/microsoft/windows-rs/raw/master/crates/libs/bindgen/default/Windows.Win32.winmd
 
+const USE_CACHE: bool = true;
+
 // TODO: Make it prettier goddamnit
 fn download_metadata(url: &str) -> Vec<u8> {
-    // let cache_path = Path::new("./windows.winmd");
-    // if !cache_path.exists() {
+    if USE_CACHE == true {
+        let file_name = String::from(url);
+        let file_name = file_name.split("/").last().unwrap();
+        let file_name = format!("winmd_cache/{}", file_name);
+        let cache_path = Path::new(file_name.as_str());
+        if !cache_path.exists() {
+            let response = reqwest::blocking::get(url).unwrap();
+            let response = response.bytes().unwrap();
+            let mut file = File::create(cache_path).unwrap();
+            let _ = file.write_all(&response);
+            return response.into();
+        } else {
+            let mut file = File::open(cache_path).unwrap();
+            let mut response: Vec<u8> = vec![];
+            file.read_to_end(&mut response).unwrap();
+            return response.into();
+        }
+    } else {
         let response = reqwest::blocking::get(url).unwrap();
         let response = response.bytes().unwrap();
-        // let mut file = File::create(cache_path).unwrap();
-        // let _ = file.write_all(&response);
         return response.into();
-    // } else {
-    //     let mut file = File::open(cache_path).unwrap();
-    //     let mut response: Vec<u8> = vec![];
-    //     file.read_to_end(&mut response).unwrap();
-    //     return response.into();
-    // }
+    }   
 }
 
 fn parse_type(type_name: &windows_metadata::Type) -> String {
@@ -50,15 +64,32 @@ struct Module {
 struct Function {
     function_name:  String,
     ret_type:       String,
-    params:     Vec<String>,
+    params:         Vec<String>,
 }
 
+#[derive(Serialize)]
+struct Enum {
+    name:           String,
+    members:        Vec<String>,
+}
 
-fn populate_result(result: &mut Vec<Module>, data: &Reader) {
+#[derive(Serialize)]
+struct Struct {
+    name:           String,
+    members:        Vec<String>,
+}
+
+struct Result {
+    function_def:   Vec<Module>,
+    struct_def:     Vec<Struct>,
+    enum_def:       Vec<Enum>,
+}
+
+fn populate_result(result: &mut Result, data: &Reader) {
     for data in data.items() {
         match data {
             Item::Const(_) => {
-                // print!("{:?} ", field.name());
+                // println!("Item::Const {:?} ", field.name());
                 // if field.name().to_lowercase() == "pszusername" {
                 //     println!("Field: {:?}", field.name());
                 // }
@@ -69,16 +100,16 @@ fn populate_result(result: &mut Vec<Module>, data: &Reader) {
                 let func_name   = method_def.name().to_string();
                 let module_name = method_def.module_name().to_string();
                 
-                let mut result_index = result
+                let mut result_index = result.function_def
                     .iter()
                     .position(|module| module.module_name == module_name);
 
                 if result_index.is_none() {
-                    result.push(Module {
+                    result.function_def.push(Module {
                         module_name,
                         functions: Vec::new(),
                     });
-                    result_index = Some(result.len() - 1);
+                    result_index = Some(result.function_def.len() - 1);
                 }
                 
                 let func_signature = method_def.signature(&[]);
@@ -97,7 +128,7 @@ fn populate_result(result: &mut Vec<Module>, data: &Reader) {
                 };
                 // println!("Function: {} : {}({:?})", module_name, func_name, params); 
                 // println!("Module: {} | Function: {} {}({})", module_name, return_type, func_name, params.join(", "));
-                let module = result.get_mut(result_index.unwrap()).unwrap();
+                let module = result.function_def.get_mut(result_index.unwrap()).unwrap();
                 module.functions.push(Function {
                     function_name: func_name,
                     ret_type: return_type, 
@@ -105,17 +136,66 @@ fn populate_result(result: &mut Vec<Module>, data: &Reader) {
                 });
                 // println!("{} : {} {}()", module_name, return_type, func_name);
             },
-            Item::Type(_) => {                
+            Item::Type(type_def) => {
+                let type_def_type = type_def.kind();
+
+                let fields = type_def.fields()
+                    .map(|field| { 
+                        let field_type = field.ty(Some(type_def));
+                        let field_type = parse_type(&field_type);
+                        
+                        let res = if type_def_type == TypeKind::Enum {
+                            format!("{}", field.name())
+                        } else {
+                            format!("{}{}", field_type, field.name())
+                        };
+                        
+                        res
+                    })
+                    .filter(|field| { !field.contains("value__") })
+                    .collect::<Vec<String>>();
+
+                match type_def_type {
+                    TypeKind::Struct => {
+                        let res_struct = Struct {
+                            name: String::from(type_def.name()),
+                            members: fields,
+                        };
+                        result.struct_def.push(res_struct);
+                    },
+                    TypeKind::Enum => {
+                        let res_enum = Enum {
+                            name: String::from(type_def.name()),
+                            members: fields,
+                        };
+                        result.enum_def.push(res_enum);
+                    },
+                    _ => {}
+                }
                 // if type_def.name().to_lowercase() == "pszusername" {
-                // print!("{:?} ", type_def.name());
+                
+                // let 
+                // println!("{:?} {:?} {:?}", type_def_type, type_def.name(), fields);
                 // }
             },
         };
     }
 }
 
+fn save_output(path: &str, data: (impl Serialize + Sized)) {
+    let res = serde_json::to_string_pretty(&data).unwrap();
+    let mut handler = File::create(path).unwrap();
+    
+    handler.write_all(res.as_bytes()).unwrap();
+}
+
 fn main() {
-    let mut result: Vec<Module> = vec![];
+    let mut result = Result {
+        enum_def: Vec::new(),
+        function_def: Vec::new(),
+        struct_def: Vec::new(),
+    };
+    // let mut class_def: Vec<Class>        = vec![];
     for (i, metadata_url) in vec![
         "https://github.com/microsoft/windows-rs/raw/master/crates/libs/bindgen/default/Windows.Win32.winmd",
         "https://github.com/microsoft/windows-rs/raw/master/crates/libs/bindgen/default/Windows.Wdk.winmd",
@@ -123,12 +203,11 @@ fn main() {
     ].iter().enumerate() {
         let metadata = MetadataFile::new(download_metadata(metadata_url)).unwrap();
         let reader = windows_metadata::Reader::new(vec![metadata]);
+        
         populate_result(&mut result, &reader);
     }
 
-    let res = serde_json::to_string_pretty(&result).unwrap();
-    
-    let mut handler = File::create("./output.json").unwrap();
-    
-    handler.write_all(res.as_bytes()).unwrap();
+    save_output("./output.json", &result.function_def);
+    save_output("./enums.json", &result.enum_def);
+    save_output("./structs.json", &result.struct_def);
 }
