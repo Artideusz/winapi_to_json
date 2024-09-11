@@ -1,4 +1,4 @@
-name: Test
+name: Force release
 
 on: workflow_dispatch
 
@@ -25,9 +25,9 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag_name: latest
+        tag_name: ${{ env.RELEASE }}
         release_name: Release ${{ env.RELEASE }}
-    - name: Upload JSON output file to the release
+    - name: Upload functions file to the release
       uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -36,4 +36,21 @@ jobs:
         asset_path: ./output.json
         asset_name: output.json
         asset_content_type: application/json
-        
+    - name: Upload enums file to the release
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./enums.json
+        asset_name: enums.json
+        asset_content_type: application/json
+    - name: Upload structs file to the release
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./structs.json
+        asset_name: structs.json
+        asset_content_type: application/json
