@@ -8,7 +8,7 @@ use std::path::Path;
 use serde::Serialize;
 // https://github.com/microsoft/windows-rs/raw/master/crates/libs/bindgen/default/Windows.Win32.winmd
 
-const USE_CACHE: bool = true;
+const USE_CACHE: bool = false;
 
 // TODO: Make it prettier goddamnit
 fn download_metadata(url: &str) -> Vec<u8> {
